@@ -1,0 +1,33 @@
+#!/usr/bin/python3
+
+import argparse
+from contextlib import closing
+from pathlib import Path
+import sqlite3
+import sys
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        'Export userstyles from a Stylish SQLite database.')
+    parser.add_argument('database', type=Path,
+        help='stylish.sqlite file in your profile')
+    parser.add_argument('--directory', '-d', type=Path, default='.',
+        help='output directory')
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    args.directory.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(str(args.database))) as db:
+        with closing(db.cursor()) as c:
+            c.execute('select name, code, enabled from styles')
+            for name, code, enabled in c.fetchall():
+                (args.directory/('{}.css{}'.format(
+                    name.replace('/', ':'),
+                    '' if enabled else '.disabled'))
+                ).write_text(code)
+
+if __name__ == '__main__':
+    sys.exit(main())

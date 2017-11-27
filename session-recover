@@ -1,0 +1,73 @@
+#!/usr/bin/python3
+
+import argparse
+import html5lib
+from io import StringIO
+import json
+import lxml.etree as et
+from lxml.html.builder import HTML, HEAD, META, TITLE, BODY, UL, LI, A
+from lxml.builder import ElementMaker
+import lz4
+from pathlib import Path
+import sys
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        'Read a Firefox sessionstore file '
+        'and write out all tab addresses as HTML.')
+    parser.add_argument('session', type=Path,
+                        help='session file (.js or .jsonlz4)')
+    parser.add_argument('--output', '-o', type=Path,
+                        help='output HTML file')
+    return parser.parse_args()
+
+
+def read_session(input):
+    with input.open('rb') as f:
+        magic = f.read(8)
+        if magic == b'mozLz40\0':
+            return lz4.decompress(f.read()).decode('utf-8')
+    return input.read_text()
+
+
+def process_tab(tab):
+    entry = tab['entries'][-1]
+    return LI(A(entry['title'], href=entry['url']))
+
+
+def process_window(window):
+    return LI('{}×{}+{}+{}'
+              .format(window['width'], window['height'],
+                      window['screenX'], window['screenY']),
+              UL(*(process_tab(tab)
+                   for tab in window['tabs'])))
+
+
+def process(session):
+    html = et.parse(StringIO('<!DOCTYPE html><html/>'))
+    html.getroot()[:] = [HEAD(META(charset='utf-8'),
+                              TITLE('Session restore')),
+                         BODY(UL(*(process_window(window)
+                                   for window in session['windows'])))]
+    return html
+
+
+def write(output, xml):
+    output.write(et.tostring(xml, pretty_print=True, method='html',
+                             encoding=str))
+
+
+def main():
+    args = parse_args()
+    session = json.loads(read_session(args.session))
+    session_xml = process(session)
+    if args.output:
+        with args.output.open('w') as output:
+            write(output, session_xml)
+    else:
+        write(sys.stdout, session_xml)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

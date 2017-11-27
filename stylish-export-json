@@ -1,0 +1,31 @@
+#!/usr/bin/python3
+
+import argparse
+import json
+from pathlib import Path
+from pprint import pprint
+import sys
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        'Extract user styles from Stylish storage.json')
+    parser.add_argument('input', type=argparse.FileType('r'),
+        help='storage.json file to read')
+    parser.add_argument('--directory', '-d', type=Path, default='.',
+        help='output directory')
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    storage = json.load(args.input or sys.stdin)
+    for style in storage['styles']:
+        (args.directory/'{}.css{}'.format(style['name'],
+                                          '' if style['enabled']
+                                          else '.disabled')
+        ).write_text(style['code'])
+
+
+if __name__ == '__main__':
+    sys.exit(main())
