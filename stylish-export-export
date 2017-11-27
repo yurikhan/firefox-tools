@@ -1,0 +1,55 @@
+#!/usr/bin/python3
+
+import argparse
+from itertools import chain
+import json
+from pathlib import Path
+from pprint import pprint
+import sys
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        'Extract user styles from Stylish exported file')
+    parser.add_argument('input', type=argparse.FileType('r'),
+        help='export file to read')
+    parser.add_argument('--directory', '-d', type=Path, default='.',
+        help='output directory')
+    return parser.parse_args()
+
+
+def process_conditions(section):
+    return ',\n  '.join(chain(('url("%s")' % url for url in section['urls']),
+                           ('url-prefix("%s")' % prefix for prefix in section['urlPrefixes']),
+                           ('domain("%s")' % domain for domain in section['domains']),
+                           ('regexp("%s")' % regexp for regexp in section['regexps'])))
+
+
+def process_section(section):
+    if section['urls'] or section['urlPrefixes'] or section['domains'] or section['regexps']:
+        return '''@-moz-document %(conditions)s {
+
+%(code)s
+
+}
+''' % {'conditions': process_conditions(section),
+       'code': section['code']}
+    return section['code']
+
+
+def process_style(style):
+    return '\n\n'.join(process_section(section) for section in style['sections'])
+
+
+def main():
+    args = parse_args()
+    storage = json.load(args.input or sys.stdin)
+    for style in storage:
+        (args.directory/'{}.css{}'.format(style['name'].replace('/', ':'),
+                                          '' if style['enabled']
+                                          else '.disabled')
+        ).write_text(process_style(style))
+
+
+if __name__ == '__main__':
+    sys.exit(main())
